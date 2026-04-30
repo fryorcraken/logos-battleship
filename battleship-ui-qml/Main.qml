@@ -7,7 +7,7 @@ Rectangle {
     color: "#1a1a1a"
 
     readonly property int gridSize: 10
-    readonly property int cellSize: 30
+    readonly property int cellSize: 56
     readonly property int gridCells: 100
 
     // Game state
@@ -30,20 +30,21 @@ Rectangle {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 12
-        spacing: 8
+        anchors.margins: 24
+        spacing: 16
 
         Text {
             text: "BATTLESHIP"
-            font.pixelSize: 20
+            font.pixelSize: 40
             font.weight: Font.Bold
+            font.letterSpacing: 6
             color: "#e0e0e0"
             Layout.alignment: Qt.AlignHCenter
         }
 
         Text {
             text: statusText()
-            font.pixelSize: 13
+            font.pixelSize: 26
             font.weight: Font.DemiBold
             color: root.gameStatus === 2 ? "#4aff4a"
                  : root.gameStatus === 3 ? "#ff4444"
@@ -53,22 +54,24 @@ Rectangle {
 
         // Two grids side by side
         RowLayout {
-            spacing: 20
+            spacing: 40
             Layout.alignment: Qt.AlignHCenter
 
             // Your Fleet
             ColumnLayout {
-                spacing: 4
+                spacing: 8
                 Text {
                     text: "YOUR FLEET"
-                    font.pixelSize: 10
+                    font.pixelSize: 20
+                    font.weight: Font.DemiBold
+                    font.letterSpacing: 3
                     color: "#888"
                     Layout.alignment: Qt.AlignHCenter
                 }
                 GridLayout {
                     columns: root.gridSize
-                    rowSpacing: 1
-                    columnSpacing: 1
+                    rowSpacing: 2
+                    columnSpacing: 2
                     Repeater {
                         model: root.gridCells
                         Rectangle {
@@ -83,13 +86,13 @@ Rectangle {
                                  : v === 1 ? "#4a4a5a"
                                  : "#1a2a3a"
                             border.color: isAiHit ? "#ffcc00" : "#333"
-                            border.width: isAiHit ? 2 : 1
-                            radius: 2
+                            border.width: isAiHit ? 3 : 1
+                            radius: 4
 
                             Text {
                                 anchors.centerIn: parent
                                 text: parent.v === 2 ? "X" : parent.v === 1 ? "o" : ""
-                                font.pixelSize: parent.v === 1 ? 8 : 12
+                                font.pixelSize: parent.v === 1 ? 16 : 24
                                 font.weight: Font.Bold
                                 color: parent.v === 2 ? "#ff8888" : "#6a6a7a"
                             }
@@ -100,17 +103,19 @@ Rectangle {
 
             // Enemy Waters
             ColumnLayout {
-                spacing: 4
+                spacing: 8
                 Text {
                     text: "ENEMY WATERS"
-                    font.pixelSize: 10
+                    font.pixelSize: 20
+                    font.weight: Font.DemiBold
+                    font.letterSpacing: 3
                     color: "#888"
                     Layout.alignment: Qt.AlignHCenter
                 }
                 GridLayout {
                     columns: root.gridSize
-                    rowSpacing: 1
-                    columnSpacing: 1
+                    rowSpacing: 2
+                    columnSpacing: 2
                     Repeater {
                         model: root.gridCells
                         Rectangle {
@@ -127,7 +132,7 @@ Rectangle {
                                  : "#1a2a3a"
                             border.color: "#333"
                             border.width: 1
-                            radius: 2
+                            radius: 4
 
                             MouseArea {
                                 anchors.fill: parent
@@ -143,7 +148,7 @@ Rectangle {
                                     : parent.v === 2 ? "X"
                                     : parent.v === 1 ? "."
                                     : ""
-                                font.pixelSize: 12
+                                font.pixelSize: 24
                                 font.weight: Font.Bold
                                 color: parent.v >= 2 ? "#ff8888" : "#556"
                             }
@@ -156,27 +161,30 @@ Rectangle {
         // Stats panel
         Rectangle {
             Layout.fillWidth: true
-            height: 44
+            height: 80
             color: "#222"
-            radius: 4
+            radius: 8
             border.color: "#333"
+            border.width: 2
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 4
-                spacing: 1
+                anchors.margins: 10
+                spacing: 4
                 Text {
                     text: "Turn: " + root.turns
                         + "  |  You: " + root.humanHits + "h/" + root.humanMisses + "m"
                         + "  |  AI: " + root.aiHits + "h/" + root.aiMisses + "m"
-                    font.pixelSize: 10
+                    font.pixelSize: 20
+                    font.family: "monospace"
                     color: "#aaa"
                     Layout.alignment: Qt.AlignHCenter
                 }
                 Text {
                     text: "Your ships: " + root.humanShips + "/5"
                         + "  |  Enemy ships: " + root.aiShips + "/5"
-                    font.pixelSize: 10
+                    font.pixelSize: 20
+                    font.family: "monospace"
                     color: "#aaa"
                     Layout.alignment: Qt.AlignHCenter
                 }
@@ -186,14 +194,16 @@ Rectangle {
         Button {
             id: newGameBtn
             text: "New Game"
-            font.pixelSize: 12
+            font.pixelSize: 24
             Layout.fillWidth: true
+            implicitHeight: 48
             onClicked: callNewGame()
 
             background: Rectangle {
                 color: newGameBtn.hovered ? "#3a3a3a" : "#2a2a2a"
                 border.color: "#555"
-                radius: 4
+                border.width: 2
+                radius: 8
             }
             contentItem: Text {
                 text: newGameBtn.text
