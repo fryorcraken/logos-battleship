@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package battleship;
+
+message JoinGame {
+    string player_id = 1;       // random UUID per session
+    bytes  board_hash = 2;      // SHA-256 of canonical board (100 bytes)
+}
+
+message Attack {
+    string player_id = 1;       // who is firing
+    uint32 row = 2;
+    uint32 col = 3;
+}
+
+message AttackResult {
+    string player_id = 1;       // who is reporting (the defender)
+    uint32 row = 2;
+    uint32 col = 3;
+    uint32 result = 4;          // 0=miss, 1=hit, 2=sunk
+    uint32 sunk_ship_type = 5;  // which ship type (only when result=sunk)
+    repeated uint32 sunk_cells = 6; // flat [r0,c0,r1,c1,...] of all sunk ship cells
+}
+
+message RevealBoard {
+    string player_id = 1;
+    bytes  board_hash = 2;      // same hash as JoinGame (self-contained verification)
+    bytes  board_data = 3;      // 100 canonical bytes, row-major
+}
+
+message GameMessage {
+    oneof payload {
+        JoinGame     join = 1;
+        Attack       attack = 2;
+        AttackResult attack_result = 3;
+        RevealBoard  reveal = 4;
+    }
+}

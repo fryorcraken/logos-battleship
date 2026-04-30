@@ -4,6 +4,7 @@ project(test_libbattleship LANGUAGES C)
 add_executable(test_libbattleship
     test_libbattleship.c
     ../lib/libbattleship.c
+    ../lib/sha256.c
 )
 
 target_include_directories(test_libbattleship PRIVATE ../lib)

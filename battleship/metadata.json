@@ -5,12 +5,12 @@
   "category": "game",
   "description": "Battleship module wrapping the libbattleship C library",
   "main": "battleship_plugin",
-  "dependencies": [],
+  "dependencies": ["delivery_module"],
 
   "nix": {
     "packages": {
-      "build": [],
-      "runtime": []
+      "build": ["protobuf"],
+      "runtime": ["protobuf"]
     },
     "external_libraries": [
       {

@@ -24,8 +24,34 @@ Rectangle {
     property int lastAiRow: -1
     property int lastAiCol: -1
 
+    // Multiplayer state
+    property int mpSt: 0         // 0=off,1=connecting,2=waiting,3=playing,4=game_over,5=error
+    property int mpIsMultiplayer: 0
+    property int mpMsgSent: 0
+    property int mpMsgRecv: 0
+    property string mpErr: ""
+    property int mpVerified: 0   // 0=pending,1=verified,2=cheat
+
     Component.onCompleted: {
+        if (typeof logos !== "undefined" && logos.onModuleEvent) {
+            logos.onModuleEvent("battleship", "attacked")
+            logos.onModuleEvent("battleship", "aiAttacked")
+            logos.onModuleEvent("battleship", "attackResult")
+            logos.onModuleEvent("battleship", "gameOver")
+            logos.onModuleEvent("battleship", "newGame")
+            logos.onModuleEvent("battleship", "mpStatusChanged")
+            logos.onModuleEvent("battleship", "opponentJoined")
+            logos.onModuleEvent("battleship", "verificationResult")
+        }
         callNewGame()
+    }
+
+    Connections {
+        target: typeof logos !== "undefined" ? logos : null
+        function onModuleEventReceived(moduleName, eventName, data) {
+            if (moduleName !== "battleship") return
+            refreshAll()
+        }
     }
 
     ColumnLayout {
@@ -167,7 +193,6 @@ Rectangle {
             spacing: 32
             Layout.alignment: Qt.AlignHCenter
 
-            // Own board legend
             RowLayout {
                 spacing: 16
                 Text { text: "Your Fleet:"; font.pixelSize: 16; color: "#666" }
@@ -188,10 +213,8 @@ Rectangle {
                 }
             }
 
-            // Separator
             Rectangle { width: 2; height: 20; color: "#444" }
 
-            // Attack board legend
             RowLayout {
                 spacing: 16
                 Text { text: "Enemy:"; font.pixelSize: 16; color: "#666" }
@@ -235,7 +258,7 @@ Rectangle {
                 Text {
                     text: "Turn: " + root.turns
                         + "  |  You: " + root.humanHits + "h/" + root.humanMisses + "m"
-                        + "  |  AI: " + root.aiHits + "h/" + root.aiMisses + "m"
+                        + "  |  Opp: " + root.aiHits + "h/" + root.aiMisses + "m"
                     font.pixelSize: 20
                     font.family: "monospace"
                     color: "#aaa"
@@ -244,6 +267,7 @@ Rectangle {
                 Text {
                     text: "Your ships: " + root.humanShips + "/5"
                         + "  |  Enemy ships: " + root.aiShips + "/5"
+                        + (root.mpIsMultiplayer ? ("  |  Msgs: " + root.mpMsgSent + "/" + root.mpMsgRecv) : "")
                     font.pixelSize: 20
                     font.family: "monospace"
                     color: "#aaa"
@@ -252,30 +276,98 @@ Rectangle {
             }
         }
 
-        Button {
-            id: newGameBtn
-            text: "New Game"
-            font.pixelSize: 24
+        // Multiplayer section
+        RowLayout {
+            spacing: 16
             Layout.fillWidth: true
-            implicitHeight: 48
-            onClicked: callNewGame()
 
-            background: Rectangle {
-                color: newGameBtn.hovered ? "#3a3a3a" : "#2a2a2a"
-                border.color: "#555"
-                border.width: 2
-                radius: 8
+            Button {
+                id: mpToggle
+                text: root.mpIsMultiplayer ? "Disable Multiplayer" : "Enable Multiplayer"
+                font.pixelSize: 20
+                Layout.fillWidth: true
+                implicitHeight: 44
+
+                onClicked: {
+                    if (root.mpIsMultiplayer)
+                        callModule("disableMultiplayer", [])
+                    else
+                        callModule("enableMultiplayer", [])
+                    refreshAll()
+                }
+
+                background: Rectangle {
+                    color: mpToggle.hovered ? "#3a3a3a" : "#2a2a2a"
+                    border.color: root.mpIsMultiplayer ? "#ff6b6b" : "#4aff4a"
+                    border.width: 2
+                    radius: 8
+                }
+                contentItem: Text {
+                    text: mpToggle.text
+                    font: mpToggle.font
+                    color: "#e0e0e0"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
             }
-            contentItem: Text {
-                text: newGameBtn.text
-                font: newGameBtn.font
-                color: "#e0e0e0"
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
+
+            Button {
+                id: newGameBtn
+                text: "New Game"
+                font.pixelSize: 20
+                Layout.fillWidth: true
+                implicitHeight: 44
+                onClicked: callNewGame()
+
+                background: Rectangle {
+                    color: newGameBtn.hovered ? "#3a3a3a" : "#2a2a2a"
+                    border.color: "#555"
+                    border.width: 2
+                    radius: 8
+                }
+                contentItem: Text {
+                    text: newGameBtn.text
+                    font: newGameBtn.font
+                    color: "#e0e0e0"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
             }
         }
 
+        // Delivery status + verification
+        Text {
+            text: deliveryStatusText()
+            font.pixelSize: 16
+            color: root.mpErr.length > 0 ? "#ff6b6b"
+                 : root.mpSt === 3 ? "#4aff4a"
+                 : root.mpSt >= 1 ? "#ffcc00"
+                 : "#666"
+            Layout.alignment: Qt.AlignHCenter
+            visible: root.mpIsMultiplayer
+        }
+
+        // Verification result
+        Text {
+            text: root.mpVerified === 1 ? "Board Verified"
+                : root.mpVerified === 2 ? "CHEAT DETECTED"
+                : ""
+            font.pixelSize: 22
+            font.weight: Font.Bold
+            color: root.mpVerified === 1 ? "#4aff4a" : "#ff2222"
+            Layout.alignment: Qt.AlignHCenter
+            visible: root.mpVerified > 0
+        }
+
         Item { Layout.fillHeight: true }
+    }
+
+    // Fallback poll timer for multiplayer (if onModuleEvent unavailable)
+    Timer {
+        interval: 500
+        repeat: true
+        running: root.mpIsMultiplayer && (typeof logos === "undefined" || !logos.onModuleEvent)
+        onTriggered: refreshAll()
     }
 
     // Bridge helpers
@@ -295,7 +387,7 @@ Rectangle {
 
     function callAttack(row, col) {
         var err = callModule("attack", [row, col])
-        if (Number(err) === 0) {
+        if (Number(err) === 0 && !root.mpIsMultiplayer) {
             var ar = callModule("aiAttackRow", [])
             var ac = callModule("aiAttackCol", [])
             root.lastAiRow = (ar !== undefined && ar !== null) ? Number(ar) : -1
@@ -336,12 +428,51 @@ Rectangle {
         root.humanShips = (hs !== undefined && hs !== null) ? Number(hs) : 0
         var as2 = callModule("shipsRemaining", [1])
         root.aiShips = (as2 !== undefined && as2 !== null) ? Number(as2) : 0
+
+        // Multiplayer state
+        var ms = callModule("mpStatus", [])
+        root.mpSt = (ms !== undefined && ms !== null) ? Number(ms) : 0
+        var mi = callModule("mpIsMultiplayer", [])
+        root.mpIsMultiplayer = (mi !== undefined && mi !== null) ? Number(mi) : 0
+        var mms = callModule("mpMessagesSent", [])
+        root.mpMsgSent = (mms !== undefined && mms !== null) ? Number(mms) : 0
+        var mmr = callModule("mpMessagesReceived", [])
+        root.mpMsgRecv = (mmr !== undefined && mmr !== null) ? Number(mmr) : 0
+        var me = callModule("mpError", [])
+        root.mpErr = (typeof me === "string") ? me : ""
+        var mv = callModule("mpVerified", [])
+        root.mpVerified = (mv !== undefined && mv !== null) ? Number(mv) : 0
+
+        // In MP, read opponent's last attack
+        if (root.mpIsMultiplayer) {
+            var oar = callModule("aiAttackRow", [])
+            var oac = callModule("aiAttackCol", [])
+            root.lastAiRow = (oar !== undefined && oar !== null) ? Number(oar) : -1
+            root.lastAiCol = (oac !== undefined && oac !== null) ? Number(oac) : -1
+        }
     }
 
     function statusText() {
+        if (root.mpIsMultiplayer) {
+            if (root.mpSt === 1) return "Connecting to network..."
+            if (root.mpSt === 2) return "Waiting for opponent..."
+            if (root.mpSt === 5) return "Error: " + root.mpErr
+            if (root.gameStatus === 2) return "VICTORY! All enemy ships destroyed!"
+            if (root.gameStatus === 3) return "DEFEAT. Your fleet has been sunk."
+            if (root.mpSt === 4) return "Game over"
+            return "Multiplayer - Your turn"
+        }
         if (root.gameStatus === 0) return "Setting up..."
         if (root.gameStatus === 2) return "VICTORY! All enemy ships destroyed!"
         if (root.gameStatus === 3) return "DEFEAT. Your fleet has been sunk."
         return "Your turn - click an enemy cell to fire"
+    }
+
+    function deliveryStatusText() {
+        if (root.mpSt === 0) return "Multiplayer: off"
+        if (root.mpSt === 1) return "Delivery: connecting..."
+        if (root.mpSt === 2) return "Delivery: connected - waiting for opponent"
+        if (root.mpSt === 5) return "Error: " + root.mpErr
+        return "Delivery: connected | sent: " + root.mpMsgSent + " recv: " + root.mpMsgRecv
     }
 }

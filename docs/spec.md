@@ -328,11 +328,147 @@ cd battleship/tests && mkdir -p build && cd build && cmake .. && make && ./test_
 - None blocking Phase 1. Phase 2 questions (delivery protocol, commit-reveal
   wire format, session scoping) are deferred.
 
-## Phase 2 Preview (Not in Scope)
+## Phase 2: Multiplayer with Commit-Reveal
 
-- Add `delivery_module` dependency to core module
-- Add protobuf wire format for attacks and results
-- Implement commit-reveal: players hash their board at game start, exchange
-  hashes, reveal boards at end for verification
-- Add multiplayer UI controls (connect/disconnect, delivery status)
-- Session scoping via unique game ID in the content topic
+### Overview
+
+Two players on the Logos Dev Network play battleship over the delivery module.
+Naive: assumes exactly 2 players on the network, no lobby. Each player gets a
+random player_id per game session for self-echo filtering and turn ordering.
+
+Ship positions are private. A commit-reveal scheme ensures honesty: each player
+commits a SHA-256 hash of their board at game start, both reveal boards at game
+end, and hashes are verified.
+
+### Content Topic
+
+`/battleship/1/game/proto`
+
+### Protobuf Wire Format (`battleship.proto`)
+
+```protobuf
+message JoinGame {
+    string player_id = 1;      // random UUID
+    bytes  board_hash = 2;      // SHA-256 of canonical board
+}
+message Attack {
+    string player_id = 1;       // who is firing
+    uint32 row = 2;
+    uint32 col = 3;
+}
+message AttackResult {
+    string player_id = 1;       // who is reporting (defender)
+    uint32 row = 2;
+    uint32 col = 3;
+    uint32 result = 4;          // 0=miss, 1=hit, 2=sunk
+    uint32 sunk_ship_type = 5;  // which ship (only if result=sunk)
+    repeated uint32 sunk_cells = 6; // flat [r0,c0,r1,c1,...] of all sunk ship cells
+}
+message RevealBoard {
+    string player_id = 1;
+    bytes  board_hash = 2;      // same hash as JoinGame (self-contained verification)
+    bytes  board_data = 3;      // 100 canonical bytes
+}
+message GameMessage {
+    oneof payload {
+        JoinGame     join = 1;
+        Attack       attack = 2;
+        AttackResult attack_result = 3;
+        RevealBoard  reveal = 4;
+    }
+}
+```
+
+### Game Flow
+
+```
+WAITING_FOR_OPPONENT:
+  1. Enable multiplayer → connect to delivery module
+  2. Randomly place own ships
+  3. board_hash = SHA-256(100 canonical board bytes)
+  4. Broadcast JoinGame { player_id, board_hash }
+  5. On opponent's JoinGame:
+     - Store opponent player_id + board_hash
+     - Lower player_id (lexicographic) fires first
+     → PLAYING
+
+PLAYING:
+  6. Active player broadcasts Attack { player_id, row, col }
+  7. Defender resolves against own board locally
+  8. Defender broadcasts AttackResult { player_id, row, col, result,
+     sunk_ship_type, sunk_cells }
+     - sunk_cells contains all (row,col) pairs of the sunk ship
+  9. Both update UI. Turn switches.
+  10. Repeat until one player's 5 ships all sunk → GAME_OVER
+
+GAME_OVER:
+  11. Both broadcast RevealBoard { player_id, board_hash, board_data }
+  12. On opponent's RevealBoard:
+      - Verify SHA-256(board_data) == board_hash in RevealBoard
+      - Cross-check board_hash == hash from their JoinGame
+      - Match → "Verified ✓"
+      - Mismatch → "CHEAT DETECTED"
+```
+
+### Canonical Board
+
+100 bytes, row-major. Each byte: 0=water, 1=Carrier, 2=Battleship,
+3=Cruiser, 4=Submarine, 5=Destroyer.
+
+### Self-Echo
+
+All messages carry player_id. Ignore messages matching our own ID.
+
+### C Library New Functions
+
+- `bs_get_board_data(game, player, out_buf)` -- 100 canonical bytes
+- `bs_get_board_hash(game, player, out_hash)` -- 32-byte SHA-256
+- `bs_verify_board(board_data, hash)` -- check SHA-256(data)==hash
+- `bs_apply_remote_attack(game, row, col, out_result)` -- opponent fires
+  at our board (player 0), returns result
+- `bs_apply_remote_result(game, row, col, result, sunk_ship, sunk_cells,
+  n_sunk_cells)` -- apply opponent's reported result to our attack board;
+  for sunk, marks all reported cells as SUNK
+
+SHA-256 via vendored single-file C implementation (no external dependency).
+
+### C++ Plugin New Interface
+
+- `enableMultiplayer()` / `disableMultiplayer()`
+- `mpStatus()` -- 0=off, 1=connecting, 2=waiting, 3=playing, 4=game_over, 5=error
+- `mpConnected()`, `mpMessagesSent()`, `mpMessagesReceived()`, `mpError()`
+- `mpVerified()` -- 0=pending, 1=verified, 2=cheat_detected
+- `mpIsMultiplayer()` -- 0/1
+- `attack(row, col)` in MP mode: broadcasts Attack, returns immediately.
+  UI shows "Waiting for opponent's move" until AttackResult arrives.
+
+Inherits all tictactoe delivery module hacks: port picking, 90s timeout,
+SDK bypass, handler dedup, `follows` directives.
+
+### QML UI Changes
+
+- Multiplayer toggle button
+- Delivery status (connecting / waiting / connected / error + msg counts)
+- "Waiting for opponent's move" status during opponent's turn
+- Verification display at game end
+- AI disabled when multiplayer active
+
+### Phase 2 Success Criteria
+
+- [ ] `lgs basecamp install` succeeds with delivery_module dependency
+- [ ] `lgs basecamp launch alice` + `lgs basecamp launch bob` both connect
+- [ ] Players exchange JoinGame with board hashes
+- [ ] Turn-based attack/result exchange works
+- [ ] Sunk ships show all cells as SUNK on attacker's board
+- [ ] Game over triggers reveal from both players
+- [ ] Board verification succeeds when both players are honest
+- [ ] Under-the-hood stats show message counts
+
+### Not Doing
+
+- No lobby/matchmaking (exactly 2 players assumed)
+- No transport encryption
+- No mid-game verification
+- No timeout for unresponsive opponents
+- No reconnection
+- No penalty beyond displaying "CHEAT DETECTED"

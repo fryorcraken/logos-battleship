@@ -322,6 +322,126 @@ static void test_out_of_bounds_queries(void) {
     bs_free(g);
 }
 
+static void test_board_data_canonical(void) {
+    BsGame* g = bs_new();
+    /* Place carrier at (0,0)-(0,4) for human */
+    bs_place_ship(g, 0, BS_SHIP_CARRIER, 0, 0, BS_DIR_HORIZONTAL);
+    bs_place_ship(g, 0, BS_SHIP_BATTLESHIP, 1, 0, BS_DIR_HORIZONTAL);
+    bs_place_ship(g, 0, BS_SHIP_CRUISER, 2, 0, BS_DIR_HORIZONTAL);
+    bs_place_ship(g, 0, BS_SHIP_SUBMARINE, 3, 0, BS_DIR_HORIZONTAL);
+    bs_place_ship(g, 0, BS_SHIP_DESTROYER, 4, 0, BS_DIR_HORIZONTAL);
+
+    uint8_t data[100];
+    bs_get_board_data(g, 0, data);
+    /* Carrier (type 0) stored as value 1 in own_board, so canonical byte = 1 */
+    assert(data[0] == 1);  /* (0,0) = carrier */
+    assert(data[4] == 1);  /* (0,4) = carrier */
+    assert(data[5] == 0);  /* (0,5) = water */
+    assert(data[10] == 2); /* (1,0) = battleship */
+    assert(data[20] == 3); /* (2,0) = cruiser */
+    assert(data[30] == 4); /* (3,0) = submarine */
+    assert(data[40] == 5); /* (4,0) = destroyer */
+    assert(data[99] == 0); /* (9,9) = water */
+    bs_free(g);
+}
+
+static void test_board_hash_verify(void) {
+    BsGame* g = bs_new();
+    bs_place_ships_random(g, 0);
+
+    uint8_t hash[32];
+    bs_get_board_hash(g, 0, hash);
+
+    uint8_t data[100];
+    bs_get_board_data(g, 0, data);
+
+    /* Verification should pass */
+    assert(bs_verify_board(data, hash) == 1);
+
+    /* Tamper with one byte -- verification should fail */
+    data[0] = (data[0] == 0) ? 1 : 0;
+    assert(bs_verify_board(data, hash) == 0);
+
+    bs_free(g);
+}
+
+static void test_apply_remote_attack(void) {
+    BsGame* g = bs_new();
+    bs_place_ship(g, 0, BS_SHIP_DESTROYER, 0, 0, BS_DIR_HORIZONTAL);
+    bs_place_ship(g, 0, BS_SHIP_CARRIER, 5, 0, BS_DIR_HORIZONTAL);
+    bs_place_ship(g, 0, BS_SHIP_BATTLESHIP, 6, 0, BS_DIR_HORIZONTAL);
+    bs_place_ship(g, 0, BS_SHIP_CRUISER, 7, 0, BS_DIR_HORIZONTAL);
+    bs_place_ship(g, 0, BS_SHIP_SUBMARINE, 8, 0, BS_DIR_HORIZONTAL);
+
+    BsShotResult result;
+    int sunk_ship;
+    int sunk_cells[10];
+    int n_sunk;
+
+    /* Miss */
+    assert(bs_apply_remote_attack(g, 9, 9, &result, &sunk_ship, sunk_cells, &n_sunk) == BS_OK);
+    assert(result == BS_SHOT_MISS);
+    assert(sunk_ship == -1);
+
+    /* Hit destroyer at (0,0) */
+    assert(bs_apply_remote_attack(g, 0, 0, &result, &sunk_ship, sunk_cells, &n_sunk) == BS_OK);
+    assert(result == BS_SHOT_HIT);
+
+    /* Sink destroyer at (0,1) */
+    assert(bs_apply_remote_attack(g, 0, 1, &result, &sunk_ship, sunk_cells, &n_sunk) == BS_OK);
+    assert(result == BS_SHOT_SUNK);
+    assert(sunk_ship == BS_SHIP_DESTROYER);
+    assert(n_sunk == 2);
+    /* Check sunk cells reported correctly */
+    assert(sunk_cells[0] == 0 && sunk_cells[1] == 0); /* (0,0) */
+    assert(sunk_cells[2] == 0 && sunk_cells[3] == 1); /* (0,1) */
+
+    bs_free(g);
+}
+
+static void test_apply_remote_result(void) {
+    BsGame* g = bs_new();
+    bs_place_ships_random(g, 0);
+    bs_place_ships_random(g, 1);
+    bs_start(g);
+
+    /* Apply a miss at (5,5) */
+    bs_apply_remote_result(g, 5, 5, BS_SHOT_MISS, NULL, 0);
+    assert(bs_get_attack_cell(g, 5, 5) == BS_CELL_MISS);
+
+    /* Apply a hit at (3,3) */
+    bs_apply_remote_result(g, 3, 3, BS_SHOT_HIT, NULL, 0);
+    assert(bs_get_attack_cell(g, 3, 3) == BS_CELL_HIT);
+
+    /* Apply a sunk with cells at (1,0) and (1,1) */
+    int sunk_cells[] = {1, 0, 1, 1};
+    bs_apply_remote_result(g, 1, 1, BS_SHOT_SUNK, sunk_cells, 2);
+    assert(bs_get_attack_cell(g, 1, 0) == BS_CELL_SUNK);
+    assert(bs_get_attack_cell(g, 1, 1) == BS_CELL_SUNK);
+
+    bs_free(g);
+}
+
+static void test_set_won_lost(void) {
+    BsGame* g = bs_new();
+    bs_place_ships_random(g, 0);
+    bs_place_ships_random(g, 1);
+    bs_start(g);
+    assert(bs_status(g) == BS_STATUS_PLAYING);
+
+    bs_set_won(g);
+    assert(bs_status(g) == BS_STATUS_WON);
+
+    bs_reset(g);
+    bs_place_ships_random(g, 0);
+    bs_place_ships_random(g, 1);
+    bs_start(g);
+    bs_set_lost(g);
+    assert(bs_status(g) == BS_STATUS_LOST);
+
+    bs_free(g);
+}
+
 /* ── Main ───────────────────────────────────────────────────────── */
 
 int main(void) {
@@ -344,6 +464,11 @@ int main(void) {
     TEST(test_win_detection);
     TEST(test_reset);
     TEST(test_out_of_bounds_queries);
+    TEST(test_board_data_canonical);
+    TEST(test_board_hash_verify);
+    TEST(test_apply_remote_attack);
+    TEST(test_apply_remote_result);
+    TEST(test_set_won_lost);
 
     printf("\n%d/%d tests passed.\n", tests_passed, tests_run);
     return (tests_passed == tests_run) ? 0 : 1;

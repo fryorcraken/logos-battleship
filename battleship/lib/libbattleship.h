@@ -149,6 +149,69 @@ int bs_turn_count(const BsGame* game);
 int bs_hit_count(const BsGame* game, int player);
 int bs_miss_count(const BsGame* game, int player);
 
+/* ── Board serialization (for commit-reveal) ────────────────────── */
+
+#define BS_BOARD_DATA_SIZE (BS_GRID_SIZE * BS_GRID_SIZE) /* 100 */
+#define BS_HASH_SIZE 32  /* SHA-256 */
+
+/**
+ * Write 100 canonical bytes for the given player's board.
+ * Row-major order. 0=water, 1=Carrier, 2=Battleship, 3=Cruiser,
+ * 4=Submarine, 5=Destroyer.
+ * @param out  Buffer of at least BS_BOARD_DATA_SIZE bytes.
+ */
+void bs_get_board_data(const BsGame* game, int player, uint8_t* out);
+
+/**
+ * Compute SHA-256 hash of the given player's canonical board.
+ * @param out  Buffer of at least BS_HASH_SIZE bytes.
+ */
+void bs_get_board_hash(const BsGame* game, int player, uint8_t* out);
+
+/**
+ * Verify that SHA-256(board_data) == expected_hash.
+ * @return 1 if match, 0 if mismatch.
+ */
+int bs_verify_board(const uint8_t* board_data, const uint8_t* expected_hash);
+
+/* ── Multiplayer helpers ────────────────────────────────────────── */
+
+/**
+ * Opponent fires at our board (player 0) at (row, col).
+ * Does NOT enforce turn order (protocol handles that).
+ * @param out_result  Set to the shot result.
+ * @param out_sunk_ship  Set to sunk ship type if result==SUNK, else -1.
+ * @param out_sunk_cells  If result==SUNK, filled with [r0,c0,r1,c1,...].
+ *                        Caller must provide buffer of at least 2*5=10 ints.
+ * @param out_n_sunk_cells  Number of (row,col) pairs written.
+ * @return BsError.
+ */
+BsError bs_apply_remote_attack(BsGame* game, int row, int col,
+                                BsShotResult* out_result,
+                                int* out_sunk_ship,
+                                int* out_sunk_cells,
+                                int* out_n_sunk_cells);
+
+/**
+ * Apply opponent's reported result to our attack board (player 0's view
+ * of player 1). For SUNK, marks all reported cells as SUNK.
+ * @param sunk_cells  Flat array [r0,c0,r1,c1,...] of sunk ship cells.
+ * @param n_sunk_cells  Number of (row,col) pairs.
+ */
+void bs_apply_remote_result(BsGame* game, int row, int col,
+                            BsShotResult result,
+                            const int* sunk_cells, int n_sunk_cells);
+
+/**
+ * Mark the game as won (we sank all opponent ships).
+ */
+void bs_set_won(BsGame* game);
+
+/**
+ * Mark the game as lost (opponent sank all our ships).
+ */
+void bs_set_lost(BsGame* game);
+
 #ifdef __cplusplus
 }
 #endif

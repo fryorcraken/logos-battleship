@@ -8,6 +8,9 @@
     # Pin battleship's logos-module-builder to ours to avoid transitive
     # version conflicts. Same pattern as tictactoe.
     battleship.inputs.logos-module-builder.follows = "logos-module-builder";
+
+    # Pin battleship's delivery_module's module-builder to ours too.
+    battleship.inputs.delivery_module.inputs.logos-module-builder.follows = "logos-module-builder";
   };
 
   outputs = inputs@{ logos-module-builder, ... }:

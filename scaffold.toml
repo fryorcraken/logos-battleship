@@ -30,6 +30,10 @@ lgpm_flake = ""
 port_base = 60000
 port_stride = 10
 
+[basecamp.modules.delivery_module]
+flake = "github:logos-co/logos-delivery-module/1fde1566291fe062b98255003b9166b0261c6081#lgx"
+role = "dependency"
+
 [basecamp.modules.battleship]
 flake = "path:./battleship#lgx"
 role = "project"

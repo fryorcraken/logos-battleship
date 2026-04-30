@@ -1,4 +1,5 @@
 #include "libbattleship.h"
+#include "sha256.h"
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -402,4 +403,130 @@ int bs_hit_count(const BsGame* game, int player) {
 int bs_miss_count(const BsGame* game, int player) {
     if (!game || player < 0 || player > 1) return 0;
     return game->players[player].misses;
+}
+
+/* ── Board serialization ────────────────────────────────────────── */
+
+void bs_get_board_data(const BsGame* game, int player, uint8_t* out) {
+    if (!game || !out || player < 0 || player > 1) {
+        if (out) memset(out, 0, BS_BOARD_DATA_SIZE);
+        return;
+    }
+    const PlayerState* p = &game->players[player];
+    for (int r = 0; r < BS_GRID_SIZE; r++)
+        for (int c = 0; c < BS_GRID_SIZE; c++)
+            out[r * BS_GRID_SIZE + c] = (uint8_t)p->own_board[r][c];
+}
+
+void bs_get_board_hash(const BsGame* game, int player, uint8_t* out) {
+    if (!game || !out || player < 0 || player > 1) {
+        if (out) memset(out, 0, BS_HASH_SIZE);
+        return;
+    }
+    uint8_t board[BS_BOARD_DATA_SIZE];
+    bs_get_board_data(game, player, board);
+    sha256(board, BS_BOARD_DATA_SIZE, out);
+}
+
+int bs_verify_board(const uint8_t* board_data, const uint8_t* expected_hash) {
+    if (!board_data || !expected_hash) return 0;
+    uint8_t computed[BS_HASH_SIZE];
+    sha256(board_data, BS_BOARD_DATA_SIZE, computed);
+    return memcmp(computed, expected_hash, BS_HASH_SIZE) == 0 ? 1 : 0;
+}
+
+/* ── Multiplayer helpers ────────────────────────────────────────── */
+
+BsError bs_apply_remote_attack(BsGame* game, int row, int col,
+                                BsShotResult* out_result,
+                                int* out_sunk_ship,
+                                int* out_sunk_cells,
+                                int* out_n_sunk_cells) {
+    if (!game) return BS_ERR_NULL_GAME;
+    if (!in_bounds(row, col)) return BS_ERR_INVALID_POSITION;
+
+    PlayerState* us = &game->players[0];  /* our board being attacked */
+    PlayerState* them = &game->players[1]; /* attacker's stats */
+
+    if (out_sunk_ship) *out_sunk_ship = -1;
+    if (out_n_sunk_cells) *out_n_sunk_cells = 0;
+
+    /* Already attacked? */
+    if (us->own_hits[row][col])
+        return BS_ERR_ALREADY_ATTACKED;
+
+    us->own_hits[row][col] = 1;
+
+    int cell = us->own_board[row][col];
+    if (cell == 0) {
+        /* Miss */
+        them->hits; /* don't track opponent stats here -- protocol handles it */
+        if (out_result) *out_result = BS_SHOT_MISS;
+    } else {
+        /* Hit */
+        int ship_idx = cell - 1;
+        Ship* ship = &us->ships[ship_idx];
+        ship->hits++;
+
+        if (ship->hits >= ship->size) {
+            /* Sunk */
+            if (out_result) *out_result = BS_SHOT_SUNK;
+            if (out_sunk_ship) *out_sunk_ship = ship_idx;
+
+            /* Report all cells of the sunk ship */
+            if (out_sunk_cells && out_n_sunk_cells) {
+                int n = 0;
+                for (int i = 0; i < ship->size; i++) {
+                    int sr = ship->row + (ship->dir == BS_DIR_VERTICAL   ? i : 0);
+                    int sc = ship->col + (ship->dir == BS_DIR_HORIZONTAL ? i : 0);
+                    out_sunk_cells[n * 2]     = sr;
+                    out_sunk_cells[n * 2 + 1] = sc;
+                    n++;
+                }
+                *out_n_sunk_cells = n;
+            }
+        } else {
+            if (out_result) *out_result = BS_SHOT_HIT;
+        }
+    }
+
+    return BS_OK;
+}
+
+void bs_apply_remote_result(BsGame* game, int row, int col,
+                            BsShotResult result,
+                            const int* sunk_cells, int n_sunk_cells) {
+    if (!game || !in_bounds(row, col)) return;
+
+    PlayerState* us = &game->players[0]; /* our attack board */
+
+    if (result == BS_SHOT_MISS) {
+        us->attack_board[row][col] = BS_CELL_MISS;
+        us->misses++;
+    } else if (result == BS_SHOT_HIT) {
+        us->attack_board[row][col] = BS_CELL_HIT;
+        us->hits++;
+    } else if (result == BS_SHOT_SUNK) {
+        us->hits++;
+        /* Mark all reported sunk cells */
+        if (sunk_cells && n_sunk_cells > 0) {
+            for (int i = 0; i < n_sunk_cells; i++) {
+                int sr = sunk_cells[i * 2];
+                int sc = sunk_cells[i * 2 + 1];
+                if (in_bounds(sr, sc))
+                    us->attack_board[sr][sc] = BS_CELL_SUNK;
+            }
+        } else {
+            /* Fallback: just mark the single cell */
+            us->attack_board[row][col] = BS_CELL_SUNK;
+        }
+    }
+}
+
+void bs_set_won(BsGame* game) {
+    if (game) game->status = BS_STATUS_WON;
+}
+
+void bs_set_lost(BsGame* game) {
+    if (game) game->status = BS_STATUS_LOST;
 }
