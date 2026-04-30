@@ -82,7 +82,7 @@ Rectangle {
                             property int v: (root.ownBoard.length > index) ? root.ownBoard[index] : 0
                             property bool isAiHit: r === root.lastAiRow && c === root.lastAiCol
 
-                            color: v === 2 ? "#cc2222"
+                            color: v === 2 ? "#881111"
                                  : v === 1 ? "#4a4a5a"
                                  : "#1a2a3a"
                             border.color: isAiHit ? "#ffcc00" : "#333"
@@ -91,10 +91,10 @@ Rectangle {
 
                             Text {
                                 anchors.centerIn: parent
-                                text: parent.v === 2 ? "X" : parent.v === 1 ? "o" : ""
-                                font.pixelSize: parent.v === 1 ? 16 : 24
+                                text: parent.v === 2 ? "\u2716" : parent.v === 1 ? "\u25A0" : ""
+                                font.pixelSize: parent.v === 1 ? 20 : 28
                                 font.weight: Font.Bold
-                                color: parent.v === 2 ? "#ff8888" : "#6a6a7a"
+                                color: parent.v === 2 ? "#ff4444" : "#7a7a8a"
                             }
                         }
                     }
@@ -126,12 +126,14 @@ Rectangle {
                             property int v: (root.attackBoard.length > index) ? root.attackBoard[index] : 0
                             property bool canFire: v === 0 && root.gameStatus === 1
 
-                            color: v === 3 ? "#aa1111"
-                                 : v === 2 ? "#cc4444"
-                                 : v === 1 ? "#2a3a4a"
+                            color: v === 3 ? "#660000"
+                                 : v === 2 ? "#884400"
+                                 : v === 1 ? "#1a2a3a"
                                  : "#1a2a3a"
-                            border.color: "#333"
-                            border.width: 1
+                            border.color: v === 3 ? "#ff2222"
+                                        : v === 2 ? "#ff8800"
+                                        : "#333"
+                            border.width: v >= 2 ? 2 : 1
                             radius: 4
 
                             MouseArea {
@@ -144,16 +146,75 @@ Rectangle {
 
                             Text {
                                 anchors.centerIn: parent
-                                text: parent.v === 3 ? "X"
-                                    : parent.v === 2 ? "X"
-                                    : parent.v === 1 ? "."
+                                text: parent.v === 3 ? "\u2620"
+                                    : parent.v === 2 ? "\u2716"
+                                    : parent.v === 1 ? "\u25CB"
                                     : ""
-                                font.pixelSize: 24
+                                font.pixelSize: parent.v === 3 ? 30 : 24
                                 font.weight: Font.Bold
-                                color: parent.v >= 2 ? "#ff8888" : "#556"
+                                color: parent.v === 3 ? "#ff2222"
+                                     : parent.v === 2 ? "#ff8800"
+                                     : "#445566"
                             }
                         }
                     }
+                }
+            }
+        }
+
+        // Legend
+        RowLayout {
+            spacing: 32
+            Layout.alignment: Qt.AlignHCenter
+
+            // Own board legend
+            RowLayout {
+                spacing: 16
+                Text { text: "Your Fleet:"; font.pixelSize: 16; color: "#666" }
+                RowLayout {
+                    spacing: 4
+                    Rectangle { width: 20; height: 20; color: "#4a4a5a"; radius: 3 }
+                    Text { text: "Ship"; font.pixelSize: 16; color: "#aaa" }
+                }
+                RowLayout {
+                    spacing: 4
+                    Rectangle { width: 20; height: 20; color: "#881111"; radius: 3 }
+                    Text { text: "Hit"; font.pixelSize: 16; color: "#aaa" }
+                }
+                RowLayout {
+                    spacing: 4
+                    Rectangle { width: 20; height: 20; color: "#1a2a3a"; radius: 3 }
+                    Text { text: "Water"; font.pixelSize: 16; color: "#aaa" }
+                }
+            }
+
+            // Separator
+            Rectangle { width: 2; height: 20; color: "#444" }
+
+            // Attack board legend
+            RowLayout {
+                spacing: 16
+                Text { text: "Enemy:"; font.pixelSize: 16; color: "#666" }
+                RowLayout {
+                    spacing: 4
+                    Rectangle { width: 20; height: 20; color: "#1a2a3a"; radius: 3; border.color: "#333"; border.width: 1
+                        Text { anchors.centerIn: parent; text: "\u25CB"; font.pixelSize: 14; color: "#445566" }
+                    }
+                    Text { text: "Miss"; font.pixelSize: 16; color: "#aaa" }
+                }
+                RowLayout {
+                    spacing: 4
+                    Rectangle { width: 20; height: 20; color: "#884400"; radius: 3; border.color: "#ff8800"; border.width: 2
+                        Text { anchors.centerIn: parent; text: "\u2716"; font.pixelSize: 14; color: "#ff8800" }
+                    }
+                    Text { text: "Hit"; font.pixelSize: 16; color: "#aaa" }
+                }
+                RowLayout {
+                    spacing: 4
+                    Rectangle { width: 20; height: 20; color: "#660000"; radius: 3; border.color: "#ff2222"; border.width: 2
+                        Text { anchors.centerIn: parent; text: "\u2620"; font.pixelSize: 16; color: "#ff2222" }
+                    }
+                    Text { text: "Sunk"; font.pixelSize: 16; color: "#aaa" }
                 }
             }
         }
