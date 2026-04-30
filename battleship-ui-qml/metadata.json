@@ -1,0 +1,25 @@
+{
+  "name": "battleship_ui_qml",
+  "version": "1.0.0",
+  "description": "Battleship QML UI — QML frontend for battleship module",
+  "type": "ui_qml",
+  "main": "Main.qml",
+  "view": "Main.qml",
+  "dependencies": ["battleship"],
+  "category": "games",
+  "icon": "icons/battleship.png",
+
+  "nix": {
+    "packages": {
+      "build": [],
+      "runtime": []
+    },
+    "external_libraries": [],
+    "cmake": {
+      "find_packages": [],
+      "extra_sources": [],
+      "extra_include_dirs": [],
+      "extra_link_libraries": []
+    }
+  }
+}
